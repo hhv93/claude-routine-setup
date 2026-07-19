@@ -64,9 +64,19 @@ def cmd_check_new(args):
     result = sheets.spreadsheets().values().get(
         spreadsheetId=args.spreadsheet_id, range=args.key_range
     ).execute()
-    existing = {row[0] for row in result.get("values", []) if row}
+    existing = set()
+    for row in result.get("values", []):
+        if not row:
+            continue
+        key = args.join.join(cell.strip().lower() for cell in row)
+        if key:
+            existing.add(key)
+
+    def normalize(candidate):
+        return args.join.join(part.strip().lower() for part in candidate.split(args.join))
+
     candidates = json.loads(args.candidates_json)
-    new_ones = [c for c in candidates if c not in existing]
+    new_ones = [c for c in candidates if normalize(c) not in existing]
     print(json.dumps(new_ones))
 
 
@@ -86,8 +96,15 @@ def main():
     p.set_defaults(func=cmd_append)
 
     p = sub.add_parser("check-new"); p.add_argument("--spreadsheet-id", required=True)
-    p.add_argument("--key-range", required=True, help="Column range holding existing dedup keys, e.g. 'E:E'")
-    p.add_argument("--candidates-json", required=True, help='JSON list of candidate keys, e.g. \'["indeed:abc123"]\'')
+    p.add_argument("--key-range", required=True,
+                    help="Column range holding existing dedup keys, e.g. 'G:G' for a single key column "
+                         "or 'B:C' to match on a combination of columns (e.g. Company+Title)")
+    p.add_argument("--candidates-json", required=True,
+                    help='JSON list of candidate keys. For multi-column key-range, join the same fields '
+                         'with --join, e.g. \'["indeed:abc123"]\' or \'["OCBC|Group Data Office"]\'')
+    p.add_argument("--join", default="|",
+                    help="Separator used to join multiple columns into one key (default '|'). "
+                         "Matching is case-insensitive and whitespace-trimmed on both sides.")
     p.set_defaults(func=cmd_check_new)
 
     args = parser.parse_args()
