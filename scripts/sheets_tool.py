@@ -58,6 +58,18 @@ def cmd_append(args):
     print(f"Appended {len(rows)} row(s)")
 
 
+def cmd_check_new(args):
+    creds = _load_credentials()
+    sheets = build("sheets", "v4", credentials=creds)
+    result = sheets.spreadsheets().values().get(
+        spreadsheetId=args.spreadsheet_id, range=args.key_range
+    ).execute()
+    existing = {row[0] for row in result.get("values", []) if row}
+    candidates = json.loads(args.candidates_json)
+    new_ones = [c for c in candidates if c not in existing]
+    print(json.dumps(new_ones))
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -72,6 +84,11 @@ def main():
     p.add_argument("--range", required=True)
     p.add_argument("--rows-json", required=True, help='JSON list of rows, e.g. \'[["a","b"]]\'')
     p.set_defaults(func=cmd_append)
+
+    p = sub.add_parser("check-new"); p.add_argument("--spreadsheet-id", required=True)
+    p.add_argument("--key-range", required=True, help="Column range holding existing dedup keys, e.g. 'E:E'")
+    p.add_argument("--candidates-json", required=True, help='JSON list of candidate keys, e.g. \'["indeed:abc123"]\'')
+    p.set_defaults(func=cmd_check_new)
 
     args = parser.parse_args()
     args.func(args)
